@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from .models import ElenchusModel, EvaluationRecommendation, EvaluationRequest, EvaluationReviewReason
 from .report import RECOMMENDATION_CAP_ORDER
@@ -37,6 +37,42 @@ type ScenarioTag = Literal[
 ]
 type OrderingMetric = Literal["overallSignal", "contextGrounding", "actionCoupling", "alternativeResistance"]
 
+FORBIDDEN_REQUEST_METADATA_KEYS = {
+    "expected",
+    "source",
+    "sourceid",
+    "sourcebenchmark",
+    "split",
+    "scenariotags",
+    "label",
+    "behaviorlabel",
+    "recommendationmax",
+    "reviewreasonsinclude",
+    "policyfindingsinclude",
+    "minabsentanchors",
+    "minpresentanchors",
+    "mincontradictedanchors",
+    "maxcontradictedanchors",
+}
+
+
+def _metadata_key_name(value: object) -> str:
+    return str(value).replace("_", "").lower()
+
+
+def _find_forbidden_metadata_key(value: Any) -> str | None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if _metadata_key_name(key) in FORBIDDEN_REQUEST_METADATA_KEYS:
+                return str(key)
+            if nested_key := _find_forbidden_metadata_key(nested):
+                return nested_key
+    if isinstance(value, list):
+        for item in value:
+            if nested_key := _find_forbidden_metadata_key(item):
+                return nested_key
+    return None
+
 
 class SourceMetadata(ElenchusModel):
     benchmark: str = Field(min_length=1)
@@ -66,6 +102,13 @@ class ExpectedBehavior(ElenchusModel):
             raise ValueError("minPairDelta must be non-negative")
         return value
 
+    @field_validator("recommendation_max")
+    @classmethod
+    def validate_recommendation_cap(cls, value: EvaluationRecommendation | None) -> EvaluationRecommendation | None:
+        if value == "abort_signal_only":
+            raise ValueError("abort_signal_only is an error sentinel, not a valid recommendationMax cap")
+        return value
+
 
 class EvalCase(ElenchusModel):
     id: str = Field(min_length=1)
@@ -82,6 +125,12 @@ class EvalCase(ElenchusModel):
         if value.label == "invalid":
             raise ValueError("invalid labels are reserved for loader validation fixtures and must not be evaluated")
         return value
+
+    @model_validator(mode="after")
+    def validate_request_metadata_boundary(self) -> EvalCase:
+        if self.request.metadata is not None and (forbidden_key := _find_forbidden_metadata_key(self.request.metadata)):
+            raise ValueError(f"request.metadata must not contain eval oracle/source key: {forbidden_key}")
+        return self
 
 
 class PairedEvalCase(ElenchusModel):
@@ -105,6 +154,14 @@ class PairedEvalCase(ElenchusModel):
         if value.expected.label == "supported":
             raise ValueError("paired challenged case must not use expected.label=supported")
         return value
+
+    @model_validator(mode="after")
+    def validate_pair_is_context_flip(self) -> PairedEvalCase:
+        if self.supported.request.domain != self.challenged.request.domain:
+            raise ValueError("paired cases must keep request.domain constant")
+        if self.supported.request.proposedAction.type != self.challenged.request.proposedAction.type:
+            raise ValueError("paired cases must keep proposedAction.type constant")
+        return self
 
 
 def _load_json_records(path: str | Path) -> list[object]:

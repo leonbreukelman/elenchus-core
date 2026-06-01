@@ -1,6 +1,6 @@
 # Fresh Session Prompt: Execute Elenchus Core Evaluation Tests
 
-Repo: `/home/leonb/projects/elenchus-core`
+Repo: this repository checkout (run from the repository root)
 
 Goal: Implement the Opus-reviewed evaluation test harness described in `docs/plans/2026-05-31-evaluation-test-execution-plan.md`.
 

@@ -1,11 +1,16 @@
+import json
 from pathlib import Path
 
-from elenchus_core.eval_cases import EvalCase
+import pytest
+
+from elenchus_core.eval_cases import EvalCase, PairedEvalCase
 from elenchus_core.eval_suite import (
     compute_label_counts,
     compute_pair_ordering_accuracy,
     evaluate_case,
+    evaluate_pair,
     run_eval_suite,
+    sanitize_pair_outcome,
     sanitize_report_outcome,
 )
 from elenchus_core.evaluator import evaluate_request
@@ -118,6 +123,34 @@ def test_pair_ordering_accuracy_counts_ties_and_nulls_as_failures():
     assert compute_pair_ordering_accuracy(pairs) == 1 / 3
 
 
+def test_sanitized_pair_outcome_includes_underlying_case_failures():
+    supported_payload = _sentinel_case().model_dump(by_alias=True)
+    supported_payload["id"] = "pair-failure-supported"
+    supported_payload["split"] = "paired"
+    supported_payload["request"]["traceId"] = "pair-failure-supported"
+
+    challenged_payload = json.loads(json.dumps(supported_payload))
+    challenged_payload["id"] = "pair-failure-challenged"
+    challenged_payload["request"]["traceId"] = "pair-failure-challenged"
+    challenged_payload["expected"]["label"] = "unsupported"
+    challenged_payload["expected"]["minPresentAnchors"] = 999
+
+    pair = PairedEvalCase.model_validate(
+        {
+            "pairId": "pair-failure-row",
+            "supported": supported_payload,
+            "challenged": challenged_payload,
+        }
+    )
+
+    outcome = evaluate_pair(pair)
+    row = sanitize_pair_outcome(outcome)
+
+    assert row["failure"] == "challenged_case_failed"
+    assert row["supportedFailures"] == []
+    assert "present_anchor_floor_not_met" in row["challengedFailures"]
+
+
 def test_runner_outputs_do_not_leak_sentinel_tokens(tmp_path: Path):
     cases_dir = tmp_path / "cases"
     cases_dir.mkdir()
@@ -132,6 +165,25 @@ def test_runner_outputs_do_not_leak_sentinel_tokens(tmp_path: Path):
         text = (output_dir / name).read_text(encoding="utf-8")
         assert "CTX_SENTINEL_DO_NOT_LEAK_7319" not in text
         assert "RAT_SENTINEL_DO_NOT_LEAK_7319" not in text
+
+
+def test_runner_rejects_empty_suite_without_success_artifacts(tmp_path: Path):
+    cases_dir = tmp_path / "empty-cases"
+    cases_dir.mkdir()
+    output_dir = tmp_path / "benchmark-output" / "eval-suite"
+
+    with pytest.raises(ValueError, match="no eval cases or pairs"):
+        run_eval_suite(cases_dir, output_dir)
+
+    assert not (output_dir / "result.json").exists()
+    assert not (output_dir / "summary.md").exists()
+
+
+def test_cli_help_mentions_all_loaded_input_files():
+    cli = Path("scripts/run_eval_suite.py").read_text(encoding="utf-8")
+    assert "smoke.jsonl" in cli
+    assert "exploratory.jsonl" in cli
+    assert "paired_adversarial.jsonl" in cli
 
 
 def test_repo_benchmark_output_directory_is_ignored():

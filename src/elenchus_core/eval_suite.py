@@ -187,6 +187,8 @@ def sanitize_pair_outcome(outcome: PairOutcome) -> OutcomeRow:
         "requiredDelta": outcome.pair.min_pair_delta,
         "passed": outcome.passed,
         "failure": outcome.failure,
+        "supportedFailures": list(outcome.supported.failures),
+        "challengedFailures": list(outcome.challenged.failures),
     }
 
 
@@ -252,11 +254,16 @@ def _load_optional_pairs(path: Path) -> list[PairedEvalCase]:
 
 def run_eval_suite(input_dir: str | Path, output_dir: str | Path) -> OutcomeRow:
     cases_dir = Path(input_dir)
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     cases = _load_optional_cases(cases_dir / "smoke.jsonl") + _load_optional_cases(cases_dir / "exploratory.jsonl")
     pairs = _load_optional_pairs(cases_dir / "paired_adversarial.jsonl")
+    if not cases and not pairs:
+        raise ValueError(
+            "no eval cases or pairs found; expected smoke.jsonl, exploratory.jsonl, or paired_adversarial.jsonl"
+        )
+
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     case_outcomes = [evaluate_case(case) for case in cases]
     pair_outcomes = [evaluate_pair(pair) for pair in pairs]
     case_rows = [sanitize_report_outcome(outcome.case, outcome.report, outcome.failures) for outcome in case_outcomes]

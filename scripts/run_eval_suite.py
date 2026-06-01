@@ -10,7 +10,11 @@ from elenchus_core.eval_suite import run_eval_suite
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run sanitized Elenchus Core curated evaluation suite.")
-    parser.add_argument("input_dir", type=Path, help="Directory containing smoke.jsonl and/or paired_adversarial.jsonl")
+    parser.add_argument(
+        "input_dir",
+        type=Path,
+        help="Directory containing smoke.jsonl, exploratory.jsonl, and/or paired_adversarial.jsonl",
+    )
     parser.add_argument("output_dir", type=Path, help="Directory for sanitized result.json, failures.jsonl, summary.md")
     args = parser.parse_args()
 
