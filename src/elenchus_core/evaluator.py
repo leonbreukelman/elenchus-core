@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .actions import action_terms, generate_near_neighbor_alternatives
+from .actions import action_terms, affirmed_term_count, generate_near_neighbor_alternatives
 from .audit import FileAuditLogger
 from .grounding import assess_context_grounding
 from .models import EvaluationReport, EvaluationRequest, EvaluationSubscores
@@ -11,8 +11,7 @@ from .toulmin import extract_toulmin_argument
 
 
 def action_coupling(request: EvaluationRequest) -> float:
-    lowered = request.rationale.lower()
-    hits = sum(1 for term in action_terms(request.proposedAction.type) if term in lowered)
+    hits = affirmed_term_count(request.rationale, action_terms(request.proposedAction.type))
     return clamp01(0.35 + hits * 0.18)
 
 
