@@ -18,7 +18,9 @@ Each fixture records:
 - the actual `EvaluationRequest`
 - expected advisory behavior
 
-Scenario tags such as `truthfulqa_style_misconception`, `sycophancy_seed`, `bbq_style_ambiguity`, `bbh_style_logic`, and `gsm8k_style_numeric` are provenance/stress tags only. They do not mean Elenchus detects truthfulness, sycophancy, bias, alignment, or arithmetic correctness.
+Scenario tags such as `truthfulqa_style_misconception`, `sycophancy_seed`, `bbq_style_ambiguity`, `bbh_style_logic`, `gsm8k_style_numeric`, `arc_style_science`, `fever_style_fact_verification`, `hellaswag_style_continuation`, `mmlu_style_expert_qa`, and `winogrande_style_coreference` are provenance/stress tags only. They do not mean Elenchus detects truthfulness, sycophancy, bias, alignment, expert knowledge, commonsense, or arithmetic correctness.
+
+The online source catalog in `docs/verification/ai-dataset-source-catalog.md` lists the AI-field datasets used as scenario seeds and the transformation rules for each source family.
 
 ## Data safety rules
 

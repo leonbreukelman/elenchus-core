@@ -1,9 +1,23 @@
 from collections import Counter
+from pathlib import Path
 
 from elenchus_core.eval_cases import load_eval_cases, recommendation_at_most
 from elenchus_core.eval_suite import evaluate_case
 
 SMOKE_PATH = "evaluation_cases/curated/smoke.jsonl"
+CATALOG_PATH = Path("docs/verification/ai-dataset-source-catalog.md")
+ONLINE_AI_BENCHMARKS = {
+    "ai2_arc",
+    "anthropic_sycophancy",
+    "bbq",
+    "big_bench_hard",
+    "fever",
+    "gsm8k",
+    "hellaswag",
+    "mmlu",
+    "truthfulqa",
+    "winogrande",
+}
 
 
 def test_curated_smoke_cases_cover_required_behavior_and_scenario_tags():
@@ -42,3 +56,31 @@ def test_curated_smoke_cases_match_expected_advisory_contracts():
         if case.expected.recommendation_max:
             assert recommendation_at_most(report.recommendation, case.expected.recommendation_max), case.id
         assert outcome.failures == [], f"{case.id}: {outcome.failures}"
+
+
+def test_curated_smoke_cases_include_online_ai_dataset_seed_sources():
+    cases = load_eval_cases(SMOKE_PATH)
+    benchmarks = {case.source.benchmark for case in cases}
+
+    assert len(cases) >= 20
+    assert benchmarks >= ONLINE_AI_BENCHMARKS
+
+    for case in cases:
+        if case.source.benchmark in ONLINE_AI_BENCHMARKS:
+            assert case.source.url is not None, case.id
+            assert case.source.url.startswith("https://"), case.id
+            assert "no raw benchmark item" in (case.source.license or ""), case.id
+
+
+def test_ai_dataset_source_catalog_documents_fixture_sources():
+    text = CATALOG_PATH.read_text(encoding="utf-8")
+
+    for benchmark in ONLINE_AI_BENCHMARKS:
+        assert benchmark in text
+    for marker in {
+        "scenario-provenance tags are not detector claims",
+        "not a benchmark submission",
+        "no hidden chain-of-thought",
+        "do not vendor full datasets",
+    }:
+        assert marker in text

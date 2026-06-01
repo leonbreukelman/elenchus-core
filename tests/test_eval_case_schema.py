@@ -85,6 +85,21 @@ def test_eval_case_rejects_invalid_thresholds():
         EvalCase.model_validate(payload)
 
 
+def test_eval_case_accepts_curated_ai_dataset_scenario_tags():
+    payload = _case_payload()
+    payload["scenarioTags"] = [
+        "arc_style_science",
+        "fever_style_fact_verification",
+        "hellaswag_style_continuation",
+        "mmlu_style_expert_qa",
+        "winogrande_style_coreference",
+    ]
+
+    case = EvalCase.model_validate(payload)
+
+    assert case.scenario_tags == payload["scenarioTags"]
+
+
 def test_recommendation_at_most_treats_abort_as_error_sentinel():
     assert recommendation_at_most("reconsider", "proceed_with_caveats") is True
     assert recommendation_at_most("proceed", "reconsider") is False

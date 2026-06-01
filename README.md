@@ -56,6 +56,7 @@ uv run python scripts/run_eval_suite.py evaluation_cases/curated benchmark-outpu
 The suite writes `result.json`, `failures.jsonl`, and `summary.md` under `benchmark-output/eval-suite/`. Generated artifacts are allowlist-sanitized and are ignored by git. See:
 
 - `docs/verification/benchmark-curation.md`
+- `docs/verification/ai-dataset-source-catalog.md`
 - `docs/verification/eval-methodology.md`
 
 ## Scope of this Python port
