@@ -1,0 +1,50 @@
+[project]
+name = "elenchus-core"
+version = "0.1.0"
+description = "Python core for Elenchus rationale-action specificity evaluation"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Leon Breukelman", email = "leon.breukelman@gmail.com" }]
+license = { text = "MIT" }
+dependencies = [
+  "fastapi>=0.115.0",
+  "pydantic>=2.10.0",
+  "uvicorn>=0.32.0",
+]
+
+[project.scripts]
+elenchus-evaluate = "elenchus_core.cli:main"
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0",
+  "mypy>=1.13.0",
+  "pytest>=8.3.0",
+  "pytest-cov>=6.0.0",
+  "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = ["E501"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/elenchus_core"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["elenchus_core"]

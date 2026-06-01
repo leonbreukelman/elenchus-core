@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "id": "strong-lock-contention",
+      "domain": "sre",
+      "context": "Postgres primary shows 95% I/O wait. pg_stat_activity reports 12 idle in transaction sessions older than 30 minutes holding locks on audit_logs. VACUUM is blocked.",
+      "proposedAction": {"type": "terminate_idle_sessions", "target": "postgres-primary", "parameters": {"maxIdleAgeMinutes": 30, "relation": "audit_logs"}, "riskLevel": "medium"},
+      "rationale": "Because 12 idle in transaction sessions older than 30 minutes are holding locks on audit_logs and blocking VACUUM, terminating sessions older than 30 minutes releases the locks and addresses the specific cause rather than only adding capacity.",
+      "human_label": "strong_specific",
+      "human_score": 0.9,
+      "human_notes": ["specific action is tied to lock contention evidence"],
+      "source": "synthetic_smoke",
+      "split": "exploratory"
+    },
+    {
+      "id": "unsupported-rollback",
+      "domain": "sre",
+      "context": "Checkout API has high latency. Error rate is normal. No deployment or version change happened today. CPU is normal.",
+      "proposedAction": {"type": "rollback_deployment", "target": "checkout-api", "riskLevel": "high"},
+      "rationale": "The latest deployment caused a regression, so rolling back the deployment will remove the bad version and restore latency.",
+      "human_label": "specific_but_unsupported",
+      "human_score": 0.25,
+      "human_notes": ["deployment causality is contradicted by context"],
+      "source": "synthetic_smoke",
+      "split": "exploratory"
+    }
+  ]
+}
