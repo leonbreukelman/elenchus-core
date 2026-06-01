@@ -71,6 +71,8 @@ def test_sanitized_outcome_is_allowlisted_and_omits_raw_prose():
         "subscores",
         "support",
         "groundingSummary",
+        "evidenceResolution",
+        "methodTrust",
         "policyFindings",
         "reviewReasons",
         "operatorReviewRequired",
@@ -78,6 +80,45 @@ def test_sanitized_outcome_is_allowlisted_and_omits_raw_prose():
         "passed",
         "failures",
     }
+
+
+def test_v2_sanitized_outcome_includes_evidence_summary_without_raw_artifact_content():
+    case_payload = _sentinel_case().model_dump(by_alias=True)
+    case_payload["id"] = "sentinel-v2-evidence-001"
+    case_payload["request"]["traceId"] = "sentinel-v2-evidence-001"
+    case_payload["request"]["domain"] = "security"
+    case_payload["request"]["context"] = "CI log mentions a token exposure; CTX_SENTINEL_DO_NOT_LEAK_7319."
+    case_payload["request"]["proposedAction"] = {"type": "revoke_token", "target": "github-token"}
+    case_payload["request"]["rationale"] = "Because CI log shows token exposure, revoke the token. RAT_SENTINEL_DO_NOT_LEAK_7319"
+    case_payload["request"]["structuredRationale"] = {
+        "claim": "Revoke the exposed token.",
+        "grounds": [
+            {
+                "text": "CI log shows token exposure.",
+                "evidenceRefs": ["ci-log"],
+                "loadBearing": True,
+            }
+        ],
+    }
+    case_payload["request"]["evidenceBundle"] = [
+        {
+            "id": "ci-log",
+            "type": "ci_log",
+            "contentPointer": "ci://build/log#L1",
+            "content": "ARTIFACT_SENTINEL_DO_NOT_LEAK_7319 CI log shows token exposure for github-token.",
+        }
+    ]
+    case = EvalCase.model_validate(case_payload)
+    report = evaluate_request(case.request)
+
+    outcome = sanitize_report_outcome(case, report, failures=[])
+    rendered = repr(outcome)
+
+    assert outcome["evidenceResolution"] is not None
+    assert outcome["methodTrust"] is not None
+    assert "ARTIFACT_SENTINEL_DO_NOT_LEAK_7319" not in rendered
+    assert "CI log shows token exposure for github-token" not in rendered
+    assert "ci-log" in rendered
 
 
 def test_non_complete_ordinary_case_is_failure_but_error_path_keeps_null_signal():

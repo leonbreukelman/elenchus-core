@@ -41,3 +41,35 @@ def test_file_audit_logger_persists_safe_metadata_without_raw_text(tmp_path):
     assert payload["payload"]["requestSummary"]["contextHash"]
     assert payload["payload"]["grounding"]["anchors"]
     assert "textHash" in payload["payload"]["grounding"]["anchors"][0]
+
+
+def test_file_audit_logger_does_not_persist_raw_structured_evidence_content(tmp_path):
+    artifact_content = "ARTIFACT_SENTINEL_DO_NOT_LEAK token [REDACTED_TOKEN] printed in CI build 8127"
+    request = EvaluationRequest.model_validate(
+        {
+            "traceId": "audit-safe-evidence-001",
+            "domain": "security",
+            "context": "CI build 8127 printed an exposed token and audit marked it urgent.",
+            "proposedAction": {"type": "revoke_token", "target": "github-token", "riskLevel": "medium"},
+            "rationale": "Because CI build 8127 printed token [REDACTED_TOKEN], revoke the token.",
+            "structuredRationale": {
+                "claim": "Revoke the exposed token.",
+                "grounds": [
+                    {"text": "CI build 8127 printed token [REDACTED_TOKEN].", "evidenceRefs": ["ci-log"], "loadBearing": True}
+                ],
+            },
+            "evidenceBundle": [
+                {"id": "ci-log", "type": "ci_log", "contentPointer": "ci://8127", "content": artifact_content}
+            ],
+        }
+    )
+    logger = FileAuditLogger(tmp_path)
+
+    report = evaluate_request(request, audit_logger=logger)
+
+    assert report.auditRef is not None
+    payload = json.loads((tmp_path / report.auditRef).read_text())
+    serialized = json.dumps(payload)
+    assert "ARTIFACT_SENTINEL_DO_NOT_LEAK" not in serialized
+    assert "[REDACTED_TOKEN]" not in serialized
+    assert payload["payload"]["requestSummary"]["contextHash"]

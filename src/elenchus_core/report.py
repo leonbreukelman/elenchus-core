@@ -12,6 +12,9 @@ from .models import (
     EvaluationRequest,
     EvaluationStatus,
     EvaluationSubscores,
+    EvidenceResolutionAssessment,
+    EvidenceTrustLevel,
+    MethodTrust,
     PolicyFinding,
     ProviderMetadata,
     ReadinessMetadata,
@@ -24,10 +27,12 @@ from .providers import DETERMINISTIC_PROVIDER_METADATA
 
 EVALUATOR_VERSION = "py-v2-alpha-2026-06-01"
 PRODUCT_SEMANTICS = (
-    "Uncalibrated internal-alpha rationale-action specificity signal with a deterministic context-grounding proxy. "
-    "It estimates whether the stated rationale specifically supports the proposed action over typed near-neighbor alternatives "
-    "and whether load-bearing rationale anchors are present, absent, or contradicted in the supplied context; it does not validate "
-    "objective truth, hidden reasoning, chain-of-thought faithfulness, production readiness, or machine-actionable consumption."
+    "Internal-alpha task-local evidence-resolving explanation-quality auditor for public structured rationale review; "
+    "advisory signal only. It checks whether load-bearing public rationale claims cite task-local artifacts, whether those "
+    "artifact refs are mechanically resolvable, and whether a conservative lexical proxy finds support. It does not judge "
+    "action correctness, objective truth, hidden CoT, external provenance, production allow/deny readiness, or "
+    "machine-actionable consumption. Counterfactual probing is not run unless an operational-agent re-execution contract "
+    "is supplied."
 )
 OVERALL_WEIGHTS = {
     "rationaleSpecificity": 0.23,
@@ -49,7 +54,7 @@ RUBRIC = RubricMetadata(
     evaluatorVersion=EVALUATOR_VERSION,
     rubricVersion="sre-specificity-py-v0",
     calibration="uncalibrated_internal_alpha",
-    signalName="rationale-action specificity",
+    signalName="task-local evidence-resolving explanation-quality auditor",
     evaluatorFingerprint=EVALUATOR_FINGERPRINT,
 )
 
@@ -96,12 +101,86 @@ def _cap_recommendation(
     )
 
 
+def _evidence_has_hard_mechanical_failure(evidence: EvidenceResolutionAssessment) -> bool:
+    summary = evidence.summary
+    return any(
+        count > 0
+        for count in (
+            summary.hashMismatch,
+            summary.pointerUnresolved,
+            summary.duplicateArtifactId,
+        )
+    )
+
+
+def _evidence_has_soft_mechanical_failure(evidence: EvidenceResolutionAssessment) -> bool:
+    summary = evidence.summary
+    return any(
+        count > 0
+        for count in (summary.missingRef, summary.pointerMissing, summary.unreferencedLoadBearing)
+    )
+
+
+def method_trust_for(
+    request: EvaluationRequest, evidence: EvidenceResolutionAssessment | None
+) -> MethodTrust:
+    notes = ["Counterfactual probing was not run; no operational-agent re-execution contract was supplied."]
+    if request.structuredRationale is None:
+        return MethodTrust(
+            structural="legacy_free_text",
+            evidenceResolution="not_available",
+            counterfactualProbe="not_run",
+            notes=[
+                "Legacy free-text request: no structured evidence-resolution layer was available.",
+                *notes,
+            ],
+        )
+    if evidence is None:
+        return MethodTrust(
+            structural="deterministic",
+            evidenceResolution="missing_or_unresolved_refs",
+            counterfactualProbe="not_run",
+            notes=["Structured rationale was present, but evidence resolution was unavailable.", *notes],
+        )
+    summary = evidence.summary
+    level: EvidenceTrustLevel
+    if _evidence_has_hard_mechanical_failure(evidence) or summary.missingRef > 0 or summary.unreferencedLoadBearing > 0:
+        level = "missing_or_unresolved_refs"
+        notes.append("One or more load-bearing evidence references were missing, duplicated, hash-mismatched, or unresolved.")
+    elif summary.hashVerified > 0 and summary.pointerMissing == 0 and summary.pointerUnresolved == 0:
+        level = "self_consistent_artifact_hash"
+        notes.append(
+            "Local artifact content matched the supplied sha256 and had a content pointer; this proves self-consistency, not external authenticity."
+        )
+    elif summary.resolved > 0:
+        level = "resolved_artifact_refs"
+        notes.append("Task-local artifact references resolved, but top hash/pointer trust was not available for every load-bearing ref.")
+    else:
+        level = "missing_or_unresolved_refs"
+        notes.append("No load-bearing artifact references resolved locally.")
+    return MethodTrust(
+        structural="deterministic",
+        evidenceResolution=level,
+        counterfactualProbe="not_run",
+        notes=notes,
+    )
+
+
 def recommend(
-    overall: float | None, findings: list[PolicyFinding], grounding: ContextGroundingAssessment | None
+    overall: float | None,
+    findings: list[PolicyFinding],
+    grounding: ContextGroundingAssessment | None,
+    evidence: EvidenceResolutionAssessment | None = None,
 ) -> EvaluationRecommendation:
     base = _base_recommendation(overall, findings)
     if base in {"abort_signal_only", "escalate"} or any(finding.severity == "blocker" for finding in findings):
         return base
+    if evidence is not None:
+        if _evidence_has_hard_mechanical_failure(evidence):
+            base = _cap_recommendation(base, "reconsider")
+        elif _evidence_has_soft_mechanical_failure(evidence):
+            cap: EvaluationRecommendation = "reconsider" if evidence.summary.missingRef > 0 or evidence.summary.unreferencedLoadBearing > 0 else "proceed_with_caveats"
+            base = _cap_recommendation(base, cap)
     if grounding is None:
         return base
     if grounding.summary.contradicted > 0:
@@ -130,6 +209,7 @@ def top_weaknesses(
     support: SupportAssessment,
     findings: list[PolicyFinding],
     grounding: ContextGroundingAssessment,
+    evidence: EvidenceResolutionAssessment | None = None,
 ) -> list[str]:
     items: list[str] = []
     if subscores.rationaleSpecificity < 0.55:
@@ -142,6 +222,15 @@ def top_weaknesses(
         )
     if grounding.summary.contradicted > 0:
         items.append("Context grounding found contradicted load-bearing rationale anchors.")
+    if evidence is not None:
+        if evidence.summary.hashMismatch > 0:
+            items.append("Evidence resolution found a hash/sha256 mismatch in a load-bearing artifact reference.")
+        if evidence.summary.duplicateArtifactId > 0:
+            items.append("Evidence bundle contains duplicate artifact IDs, so colliding refs were treated as unresolved.")
+        if evidence.summary.missingRef > 0 or evidence.summary.unreferencedLoadBearing > 0:
+            items.append("Load-bearing structured rationale grounds have missing or absent evidence references.")
+        if evidence.summary.pointerUnresolved > 0 or evidence.summary.hashUnverifiable > 0:
+            items.append("One or more evidence pointers could not be dereferenced locally in this slice.")
     if support.specificityMargin < 0.2:
         items.append("Strongest near-neighbor alternative remains similarly supported.")
     items.extend(finding.message for finding in findings if finding.severity != "info")
@@ -168,8 +257,9 @@ def readiness(
     overall: float | None,
     grounding: ContextGroundingAssessment | None,
     findings: list[PolicyFinding],
+    evidence: EvidenceResolutionAssessment | None = None,
 ) -> ReadinessMetadata:
-    reasons: list[str] = ["uncalibrated_internal_alpha", "specificity_margin_unreliable"]
+    reasons: list[str] = ["uncalibrated_internal_alpha", "specificity_margin_unreliable", "counterfactual_probe_not_run"]
     if status != "complete" or overall is None:
         reasons.append("incomplete_evaluation")
     if overall is not None and overall < 0.55:
@@ -183,8 +273,25 @@ def readiness(
             reasons.append("weak_context_grounding")
         if grounding.summary.contradicted > 0:
             reasons.append("contradicted_grounding")
+    if evidence is not None:
+        if evidence.summary.hashMismatch > 0:
+            reasons.append("evidence_hash_mismatch")
+        if evidence.summary.hashUnverifiable > 0:
+            reasons.append("evidence_hash_unverifiable")
+        if evidence.summary.duplicateArtifactId > 0:
+            reasons.append("duplicate_evidence_artifact_id")
+        if (
+            evidence.summary.missingRef > 0
+            or evidence.summary.pointerMissing > 0
+            or evidence.summary.pointerUnresolved > 0
+            or evidence.summary.unreferencedLoadBearing > 0
+        ):
+            reasons.append("unresolved_evidence_refs")
     high_priority = [
-        reason for reason in reasons if reason not in {"uncalibrated_internal_alpha", "specificity_margin_unreliable"}
+        reason
+        for reason in reasons
+        if reason
+        not in {"uncalibrated_internal_alpha", "specificity_margin_unreliable", "counterfactual_probe_not_run"}
     ]
     return ReadinessMetadata(
         operatingMode="internal_alpha_advisory",
@@ -216,29 +323,33 @@ def build_report(
     findings: list[PolicyFinding],
     provider_metadata: ProviderMetadata = DETERMINISTIC_PROVIDER_METADATA,
     audit_ref: str | None = None,
+    evidence_resolution: EvidenceResolutionAssessment | None = None,
 ) -> EvaluationReport:
     support = support_with_margin_reliability(support)
     overall = overall_signal(subscores)
+    method_trust = method_trust_for(request, evidence_resolution)
     return EvaluationReport(
         traceId=request.traceId,
         status="complete",
-        recommendation=recommend(overall, findings, grounding),
+        recommendation=recommend(overall, findings, grounding, evidence_resolution),
         calibration="uncalibrated_internal_alpha",
         overallSignal=overall,
         subscores=subscores,
         support=support,
         grounding=grounding,
+        evidenceResolution=evidence_resolution,
+        methodTrust=method_trust,
         toulmin=toulmin,
         alternatives=alternatives,
         policyFindings=findings,
-        topWeaknesses=top_weaknesses(subscores, support, findings, grounding),
+        topWeaknesses=top_weaknesses(subscores, support, findings, grounding, evidence_resolution),
         confidence=confidence(subscores, support, grounding),
         rubric=RUBRIC,
         providerMetadata=provider_metadata,
         auditRef=audit_ref,
         errors=[],
         productSemantics=PRODUCT_SEMANTICS,
-        readiness=readiness("complete", overall, grounding, findings),
+        readiness=readiness("complete", overall, grounding, findings, evidence_resolution),
         createdAt=_now(),
     )
 

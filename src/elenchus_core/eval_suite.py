@@ -109,9 +109,22 @@ def sanitize_report_outcome(case: EvalCase, report: EvaluationReport, failures: 
             "specificityMargin": report.support.specificityMargin,
             "strongestAlternativeId": report.support.strongestAlternativeId,
         }
-    subscores: dict[str, float] | None = None
+    subscores: dict[str, float | None] | None = None
     if report.subscores is not None:
         subscores = report.subscores.model_dump()
+    evidence_resolution: dict[str, Any] | None = None
+    if report.evidenceResolution is not None:
+        evidence_resolution = {
+            "score": report.evidenceResolution.score,
+            "mechanicalScore": report.evidenceResolution.mechanicalScore,
+            "supportScore": report.evidenceResolution.supportScore,
+            "summary": report.evidenceResolution.summary.model_dump(),
+            "refs": [
+                {"artifactId": ref.artifactId, "statuses": list(ref.statuses)}
+                for ref in report.evidenceResolution.refs
+            ],
+        }
+    method_trust = report.methodTrust.model_dump()
     return {
         "id": case.id,
         "split": case.split,
@@ -125,6 +138,8 @@ def sanitize_report_outcome(case: EvalCase, report: EvaluationReport, failures: 
         "subscores": subscores,
         "support": support,
         "groundingSummary": grounding_summary,
+        "evidenceResolution": evidence_resolution,
+        "methodTrust": method_trust,
         "policyFindings": [{"code": finding.code, "severity": finding.severity} for finding in report.policyFindings],
         "reviewReasons": list(report.readiness.reviewReasons),
         "operatorReviewRequired": report.readiness.operatorReviewRequired,

@@ -1,12 +1,18 @@
 # Elenchus Core
 
-Python core for Elenchus Validator: an internal-alpha rationale-action specificity and context-grounding signal for agent workflows.
+Python core for Elenchus Validator: an internal-alpha task-local evidence-resolving explanation-quality auditor for agent workflows.
 
-Elenchus Core is not a truth oracle, hidden chain-of-thought detector, autonomous allow/deny gate, production safety system, or calibrated decision system. Until human-labeled calibration exists, outputs remain `uncalibrated_internal_alpha` and require operator review.
+Elenchus Core is an advisory signal only. It is not a truth oracle, hidden chain-of-thought detector, autonomous allow/deny gate, production safety system, calibrated decision system, or action-correctness judge. Until human-labeled calibration exists, outputs remain `uncalibrated_internal_alpha` and require operator review.
 
 ## Product claim
 
-Given context, a proposed typed action, and a public rationale, Elenchus estimates whether the rationale specifically supports the proposed action over typed near-neighbor alternatives and whether load-bearing rationale anchors are present, absent, or contradicted in the supplied context.
+Given context, a proposed typed action, and a public rationale, Elenchus estimates whether the rationale specifically supports the proposed action over typed near-neighbor alternatives, whether load-bearing rationale anchors are present in supplied context, and, for v2 structured requests, whether load-bearing public structured rationale grounds cite task-local artifacts that mechanically resolve.
+
+For structured evidence-backed requests, Elenchus separates mechanical artifact validation from fuzzy support scoring:
+
+- Mechanical validation checks task-local evidence refs, duplicate artifact IDs, content pointers, local content availability, and supplied sha256 self-consistency.
+- Advisory support scoring is a conservative lexical-overlap proxy only; it is not entailment, external provenance validation, objective truth validation, or action correctness.
+- Counterfactual probing is reported as `not_run` unless an operational-agent re-execution contract is supplied.
 
 ## Local development
 
@@ -23,7 +29,7 @@ uv run mypy
 uv run uvicorn elenchus_core.http:app --reload
 ```
 
-`POST /api/v2/evaluate` accepts:
+`POST /api/v2/evaluate` accepts legacy free-text requests and additive structured evidence fields:
 
 ```json
 {
@@ -31,7 +37,21 @@ uv run uvicorn elenchus_core.http:app --reload
   "domain": "sre",
   "context": "Postgres primary has 95% I/O wait. 12 idle in transaction sessions hold locks on audit_logs and block VACUUM.",
   "proposedAction": {"type": "terminate_idle_sessions", "target": "postgres-primary", "riskLevel": "medium"},
-  "rationale": "Because 12 idle in transaction sessions are holding locks on audit_logs and blocking VACUUM, terminating them releases the locks rather than only adding capacity."
+  "rationale": "Because 12 idle in transaction sessions are holding locks on audit_logs and blocking VACUUM, terminating them releases the locks rather than only adding capacity.",
+  "structuredRationale": {
+    "claim": "Terminate idle database sessions holding locks.",
+    "grounds": [{"text": "12 idle in transaction sessions hold locks on audit_logs.", "evidenceRefs": ["pg-stat-activity"], "loadBearing": true}],
+    "rejectedAlternatives": [{"actionId": "increase_iops", "reason": "I/O capacity does not release the specific locks."}],
+    "uncertainty": ["Session owners still need post-action review."],
+    "wouldChangeIf": ["If sessions are active user writes, page a human instead."]
+  },
+  "evidenceBundle": [{
+    "id": "pg-stat-activity",
+    "type": "query_result",
+    "contentPointer": "postgres://primary/pg_stat_activity?snapshot=2026-06-01T00:00Z",
+    "content": "12 idle in transaction sessions hold locks on audit_logs and block VACUUM"
+  }],
+  "domainHints": ["cloud"]
 }
 ```
 
@@ -65,6 +85,9 @@ Implemented now:
 
 - Pydantic request/report models
 - deterministic evaluator pipeline
+- task-local evidence-resolving explanation auditor for public structured rationale
+- mechanical evidence validation separate from advisory lexical support scoring
+- thin domain lenses for `sre`, `tech`, `cloud`, `security`, `software`, and `ai_ml`
 - SRE policy overlay
 - near-neighbor alternatives
 - Toulmin/specificity heuristics
@@ -77,6 +100,8 @@ Deferred intentionally:
 
 - sidecar integration
 - MCP server surface
-- paid/live LLM provider adapters
+- paid/live LLM provider adapters in production code
+- operational-agent re-execution/counterfactual probing contract
+- external artifact dereferencing or provenance certification
 - production calibration claims
 

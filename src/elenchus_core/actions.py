@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from .lenses import DomainLens, selected_lenses
 from .models import AlternativeAction, EvaluationRequest, TypedAction
 
 SRE_ACTION_TYPES = [
@@ -43,10 +44,14 @@ def normalize_action_type(value: str) -> str:
     return re.sub(r"_+", "_", cleaned).strip("_")
 
 
-def action_terms(action_type: str) -> list[str]:
+def action_terms(action_type: str, lenses: list[DomainLens] | None = None) -> list[str]:
     normalized = normalize_action_type(action_type)
     base = [part for part in normalized.split("_") if part]
-    terms = [normalized.replace("_", " "), *base, *ACTION_SYNONYMS.get(normalized, [])]
+    synonyms = list(ACTION_SYNONYMS.get(normalized, []))
+    if lenses is not None:
+        for lens in lenses:
+            synonyms.extend(lens.action_synonyms.get(normalized, ()))
+    terms = [normalized.replace("_", " "), *base, *synonyms]
     return sorted({term for term in terms if term})
 
 
@@ -66,9 +71,29 @@ def affirmed_term_count(text: str, terms: list[str]) -> int:
     return hits
 
 
+def _append_unique(values: list[str], value: str) -> None:
+    if value not in values:
+        values.append(value)
+
+
+def _candidate_action_types(request: EvaluationRequest) -> list[str]:
+    if request.domain == "sre" and not request.domainHints and request.availableActions is None:
+        return list(SRE_ACTION_TYPES)
+    candidates: list[str] = []
+    if request.availableActions is not None:
+        for action in request.availableActions:
+            _append_unique(candidates, normalize_action_type(action.type))
+    for lens in selected_lenses(request):
+        for action_type in lens.action_types:
+            _append_unique(candidates, normalize_action_type(action_type))
+    if not candidates:
+        candidates = ["investigate_more", "page_human", "no_action"]
+    return candidates
+
+
 def generate_near_neighbor_alternatives(request: EvaluationRequest) -> list[AlternativeAction]:
     original = normalize_action_type(request.proposedAction.type)
-    candidates = SRE_ACTION_TYPES if request.domain == "sre" else ["investigate_more", "page_human", "no_action"]
+    candidates = _candidate_action_types(request)
     alternatives: list[AlternativeAction] = []
     for index, candidate in enumerate([item for item in candidates if item != original], start=1):
         alternatives.append(

@@ -101,3 +101,31 @@ def test_error_report_has_no_fake_numeric_signal():
     assert report.grounding is None
     assert report.confidence is None
     assert report.recommendation == "abort_signal_only"
+
+
+def test_legacy_free_text_path_has_no_v2_evidence_signal_and_no_counterfactual_review_need():
+    request = EvaluationRequest(
+        traceId="legacy-stability-001",
+        domain="sre",
+        context=(
+            "Postgres primary shows 95% I/O wait and 12 idle in transaction sessions older than "
+            "30 minutes holding locks on audit_logs. VACUUM is blocked."
+        ),
+        proposedAction=TypedAction(type="terminate_idle_sessions", target="postgres-primary", riskLevel="medium"),
+        rationale=(
+            "Because 12 idle in transaction sessions older than 30 minutes hold locks on audit_logs, "
+            "terminating idle sessions releases the locks and unblocks VACUUM."
+        ),
+    )
+
+    report = evaluate_request(request)
+
+    assert report.evidenceResolution is None
+    assert report.methodTrust.structural == "legacy_free_text"
+    assert report.methodTrust.evidenceResolution == "not_available"
+    assert report.subscores is not None
+    assert report.subscores.evidenceResolution is None
+    assert report.subscores.evidenceCoverage is None
+    assert report.subscores.structuralCompleteness is None
+    assert "counterfactual_probe_not_run" in report.readiness.reviewReasons
+    assert report.readiness.reviewNeeded is False
