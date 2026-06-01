@@ -36,6 +36,12 @@ OVERALL_WEIGHTS = {
     "policyAlignment": 0.15,
     "contextGrounding": 0.20,
 }
+RECOMMENDATION_CAP_ORDER: tuple[EvaluationRecommendation, ...] = (
+    "proceed",
+    "proceed_with_caveats",
+    "reconsider",
+    "escalate",
+)
 EVALUATOR_FINGERPRINT = sha256_hex(
     str({"version": EVALUATOR_VERSION, "weights": OVERALL_WEIGHTS, "grounding": GROUNDING_RULESET_FINGERPRINT})
 )[:16]
@@ -83,10 +89,11 @@ def _base_recommendation(overall: float | None, findings: list[PolicyFinding]) -
 def _cap_recommendation(
     recommendation: EvaluationRecommendation, cap: EvaluationRecommendation
 ) -> EvaluationRecommendation:
-    order = ["proceed", "proceed_with_caveats", "reconsider", "escalate"]
-    if recommendation not in order or cap not in order:
+    if recommendation not in RECOMMENDATION_CAP_ORDER or cap not in RECOMMENDATION_CAP_ORDER:
         return recommendation
-    return cap if order.index(recommendation) < order.index(cap) else recommendation
+    return (
+        cap if RECOMMENDATION_CAP_ORDER.index(recommendation) < RECOMMENDATION_CAP_ORDER.index(cap) else recommendation
+    )
 
 
 def recommend(

@@ -45,6 +45,19 @@ uv run elenchus-evaluate evaluation_cases/sre-signal-validation-sample.json benc
 
 The runner writes `result.json` and `comparison.csv`.
 
+## Curated intended-use evaluation suite
+
+The Python core now includes deterministic, sanitized intended-use fixtures for the first SRE/incident-response wedge:
+
+```bash
+uv run python scripts/run_eval_suite.py evaluation_cases/curated benchmark-output/eval-suite
+```
+
+The suite writes `result.json`, `failures.jsonl`, and `summary.md` under `benchmark-output/eval-suite/`. Generated artifacts are allowlist-sanitized and are ignored by git. See:
+
+- `docs/verification/benchmark-curation.md`
+- `docs/verification/eval-methodology.md`
+
 ## Scope of this Python port
 
 Implemented now:

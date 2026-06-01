@@ -25,6 +25,17 @@ ACTION_SYNONYMS: dict[str, list[str]] = {
     "investigate_more": ["investigate", "inspect", "gather", "logs", "metrics"],
     "no_action": ["no action", "wait", "monitor", "observe"],
 }
+NEGATING_TERM_PREFIXES = (
+    "instead of",
+    "rather than",
+    "not",
+    "no",
+    "without",
+    "avoid",
+    "avoiding",
+    "do not",
+    "don't",
+)
 
 
 def normalize_action_type(value: str) -> str:
@@ -37,6 +48,22 @@ def action_terms(action_type: str) -> list[str]:
     base = [part for part in normalized.split("_") if part]
     terms = [normalized.replace("_", " "), *base, *ACTION_SYNONYMS.get(normalized, [])]
     return sorted({term for term in terms if term})
+
+
+def affirmed_term_count(text: str, terms: list[str]) -> int:
+    lowered = text.lower()
+    hits = 0
+    for term in terms:
+        pattern = re.compile(rf"(?<![a-z0-9]){re.escape(term.lower())}(?![a-z0-9])")
+        for match in pattern.finditer(lowered):
+            prefix_window = lowered[max(0, match.start() - 80) : match.start()]
+            if any(
+                re.search(rf"\b{re.escape(prefix)}\b[^.?!;:,]*$", prefix_window) for prefix in NEGATING_TERM_PREFIXES
+            ):
+                continue
+            hits += 1
+            break
+    return hits
 
 
 def generate_near_neighbor_alternatives(request: EvaluationRequest) -> list[AlternativeAction]:

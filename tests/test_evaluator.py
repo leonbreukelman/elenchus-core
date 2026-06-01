@@ -57,6 +57,32 @@ def test_unsupported_specific_rationale_is_capped_by_grounding():
     assert report.readiness.reviewNeeded is True
 
 
+def test_negated_near_neighbor_action_does_not_get_proceed_recommendation():
+    request = EvaluationRequest(
+        traceId="sre-action-mismatch",
+        domain="sre",
+        context=(
+            "Checkout API has CPU saturation at 96% on every pod, request latency is rising, "
+            "and no deployment or version change occurred today."
+        ),
+        proposedAction=TypedAction(type="rollback_deployment", target="checkout-api", riskLevel="medium"),
+        rationale=(
+            "Because CPU saturation is 96% on every pod, scaling service replicas adds capacity "
+            "and reduces latency instead of rolling back a deployment."
+        ),
+    )
+
+    report = evaluate_request(request)
+
+    assert report.status == "complete"
+    assert report.recommendation in {"proceed_with_caveats", "reconsider", "escalate"}
+    assert report.support is not None
+    assert report.support.strongestAlternativeId is not None
+    assert "scale_service" in report.support.strongestAlternativeId
+    assert report.subscores is not None
+    assert report.subscores.actionCoupling < 0.55
+
+
 def test_error_report_has_no_fake_numeric_signal():
     request = EvaluationRequest(
         traceId="bad-provider",

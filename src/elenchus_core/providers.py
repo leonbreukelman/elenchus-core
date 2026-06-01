@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .actions import action_terms
+from .actions import action_terms, affirmed_term_count
 from .models import AlternativeAction, EvaluationRequest, ProviderMetadata, SupportAssessment
 from .toulmin import clamp01, score_specificity
 
@@ -139,11 +139,10 @@ def resolve_default_provider_config(env: Mapping[str, str]) -> ProviderResolutio
 
 
 def _term_support(text: str, action_type: str) -> float:
-    lowered = text.lower()
     terms = action_terms(action_type)
     if not terms:
         return 0.0
-    hits = sum(1 for term in terms if term in lowered)
+    hits = affirmed_term_count(text, terms)
     return min(1.0, hits / min(len(terms), 6))
 
 
