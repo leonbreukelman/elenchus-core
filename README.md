@@ -4,6 +4,24 @@ Python core for Elenchus Validator: an internal-alpha task-local evidence-resolv
 
 Elenchus Core is an advisory signal only. It is not a truth oracle, hidden chain-of-thought detector, autonomous allow/deny gate, production safety system, calibrated decision system, or action-correctness judge. Until human-labeled calibration exists, outputs remain `uncalibrated_internal_alpha` and require operator review.
 
+## In tribute to David Deutsch
+
+Elenchus is named and built in the spirit of explanation. It is a tribute to David Deutsch and *The Beginning of Infinity*, and to the idea that good explanations are hard to vary: change a good explanation and it stops explaining the thing it was meant to explain.
+
+Elenchus brings that test to agent workflows:
+
+> When an AI system gives a public rationale for an action, is that rationale hard to vary, or could it just as easily justify a different action?
+
+Concretely, that question shows up in the mechanics:
+
+- **Hard-to-vary action specificity**: the evaluator checks whether a rationale specifically supports the proposed typed action over near-neighbor alternatives, rather than merely sounding plausible.
+- **Supplied-context and evidence anchoring**: load-bearing rationale anchors and structured grounds must resolve against supplied task-local context and evidence, never an external truth oracle.
+- **Criticizability**: structured requests surface `uncertainty` and `wouldChangeIf`, and outputs stay `uncalibrated_internal_alpha` pending operator review.
+
+The aspiration is modest but important: help build AI systems that are more criticizable, more accountable, and more committed to explanations that survive attempted variation.
+
+This project is independently created in admiration of David Deutsch's work and is not affiliated with or endorsed by him.
+
 ## Product claim
 
 Given context, a proposed typed action, and a public rationale, Elenchus estimates whether the rationale specifically supports the proposed action over typed near-neighbor alternatives, whether load-bearing rationale anchors are present in supplied context, and, for v2 structured requests, whether load-bearing public structured rationale grounds cite task-local artifacts that mechanically resolve.
@@ -55,7 +73,9 @@ uv run uvicorn elenchus_core.http:app --reload
 }
 ```
 
-Set ELENCHUS_API_TOKEN to require a Bearer token in the Authorization header.
+Set ELENCHUS_API_TOKEN to require a Bearer token in the Authorization header for evaluation endpoints.
+
+`GET /healthz` is an unauthenticated liveness probe returning `{"status": "ok"}`.
 
 ## CLI validation runner
 
@@ -87,7 +107,7 @@ Implemented now:
 - deterministic evaluator pipeline
 - task-local evidence-resolving explanation auditor for public structured rationale
 - mechanical evidence validation separate from advisory lexical support scoring
-- thin domain lenses for `sre`, `tech`, `cloud`, `security`, `software`, and `ai_ml`
+- thin domain lenses for `sre`, `tech`, `cloud`, `security`, `software`, `ai_ml`, and `generic` vocabulary hints, selected deterministically from request domain, then `domainHints`, then `generic` fallback
 - SRE policy overlay
 - near-neighbor alternatives
 - Toulmin/specificity heuristics
@@ -100,7 +120,7 @@ Deferred intentionally:
 
 - sidecar integration
 - MCP server surface
-- paid/live LLM provider adapters in production code
+- live paid LLM provider calls; the evaluator is deterministic-only, and any provider/model resolution present in code is unused scaffolding with no live call path
 - operational-agent re-execution/counterfactual probing contract
 - external artifact dereferencing or provenance certification
 - production calibration claims
