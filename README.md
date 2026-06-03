@@ -24,7 +24,7 @@ This project is independently created in admiration of David Deutsch's work and 
 
 ## Product claim
 
-Given context, a proposed typed action, and a public rationale, Elenchus estimates whether the rationale specifically supports the proposed action over typed near-neighbor alternatives, whether load-bearing rationale anchors are present in supplied context, and, for v2 structured requests, whether load-bearing public structured rationale grounds cite task-local artifacts that mechanically resolve.
+Given context, a proposed typed action, and a public rationale, Elenchus estimates whether the rationale specifically supports the proposed action over typed near-neighbor alternatives, whether load-bearing rationale anchors are present in supplied context, and, for v2 structured requests, whether load-bearing public structured rationale grounds cite task-local artifacts that mechanically resolve. When callers supply `projectModel`, Elenchus also emits deterministic advisory Project Model v0 alignment signals such as presence/validity, goal/component alignment, invariant/dependency gaps, evidence grounding gaps, near-neighbor resistance, held-out probe failures, and an optional F1/F2/F3/F4 hint.
 
 For structured evidence-backed requests, Elenchus separates mechanical artifact validation from fuzzy support scoring:
 
@@ -73,6 +73,8 @@ uv run uvicorn elenchus_core.http:app --reload
 }
 ```
 
+`projectModel` is also accepted as an additive v2 field for the shared Project Model v0 contract from `build-arena`. When present, the response includes `projectModelAlignment` with advisory validity, goal/component alignment, invariant/dependency, unsupported assumption, evidence grounding, near-neighbor, held-out probe, and optional F-label hint signals. See `docs/api-project-model-v0.md` for the full request/report example.
+
 Set ELENCHUS_API_TOKEN to require a Bearer token in the Authorization header for evaluation endpoints.
 
 `GET /healthz` is an unauthenticated liveness probe returning `{"status": "ok"}`.
@@ -107,6 +109,7 @@ Implemented now:
 - deterministic evaluator pipeline
 - task-local evidence-resolving explanation auditor for public structured rationale
 - mechanical evidence validation separate from advisory lexical support scoring
+- additive Project Model v0 request input and deterministic `projectModelAlignment` advisory report signals
 - thin domain lenses for `sre`, `tech`, `cloud`, `security`, `software`, `ai_ml`, and `generic` vocabulary hints, selected deterministically from request domain, then `domainHints`, then `generic` fallback
 - SRE policy overlay
 - near-neighbor alternatives

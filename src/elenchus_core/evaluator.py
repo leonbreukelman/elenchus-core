@@ -6,6 +6,7 @@ from .evidence import assess_evidence_resolution
 from .grounding import assess_context_grounding
 from .models import EvaluationReport, EvaluationRequest, EvaluationSubscores
 from .policy import evaluate_sre_policy
+from .project_model import assess_project_model_alignment
 from .providers import DETERMINISTIC_PROVIDER_METADATA, assess_support
 from .report import build_error_report, build_report, clamp01
 from .toulmin import extract_toulmin_argument
@@ -52,6 +53,7 @@ def evaluate_request(
         policy_score, policy_findings = evaluate_sre_policy(request) if request.domain == "sre" else (0.7, [])
         grounding = assess_context_grounding(request)
         evidence_resolution = assess_evidence_resolution(request)
+        project_model_alignment = assess_project_model_alignment(request)
         context_grounding_score = grounding.score
         if evidence_resolution is not None:
             context_grounding_score = clamp01(min(context_grounding_score, evidence_resolution.mechanicalScore))
@@ -75,6 +77,7 @@ def evaluate_request(
             findings=policy_findings,
             provider_metadata=DETERMINISTIC_PROVIDER_METADATA,
             evidence_resolution=evidence_resolution,
+            project_model_alignment=project_model_alignment,
         )
         if audit_logger is not None:
             audit_ref = audit_logger.write(request, report)
