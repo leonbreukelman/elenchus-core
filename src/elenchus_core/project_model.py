@@ -1036,7 +1036,7 @@ def _first_cycle(graph: dict[str, set[str]]) -> list[str]:
         if node in visiting:
             try:
                 start = stack.index(node)
-            except ValueError:
+            except ValueError:  # pragma: no cover - visiting nodes are always pushed onto stack.
                 start = 0
             return [*stack[start:], node]
         if node in visited:
