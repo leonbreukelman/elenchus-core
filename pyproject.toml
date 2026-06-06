@@ -18,6 +18,7 @@ elenchus-evaluate = "elenchus_core.cli:main"
 [dependency-groups]
 dev = [
   "httpx>=0.28.0",
+  "jsonschema>=4.23.0",
   "mypy>=1.13.0",
   "pytest>=8.3.0",
   "pytest-cov>=6.0.0",
