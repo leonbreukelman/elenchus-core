@@ -144,6 +144,15 @@ def _project_model_has_alignment_gaps(project_model: ProjectModelAlignment | Non
     )
 
 
+def _project_model_label(project_model: ProjectModelAlignment | None) -> str:
+    schema_version = project_model.projectModelValidity.schemaVersion if project_model is not None else None
+    if schema_version == "project-model/v0":
+        return "Project Model v0"
+    if schema_version == "project-model/v1":
+        return "Project Model v1"
+    return "Project Model v0/v1"
+
+
 def method_trust_for(
     request: EvaluationRequest, evidence: EvidenceResolutionAssessment | None
 ) -> MethodTrust:
@@ -242,9 +251,13 @@ def top_weaknesses(
 ) -> list[str]:
     items: list[str] = []
     if _project_model_invalid(project_model):
-        items.append("Project Model v0 is invalid or unsupported; alignment signals are reported as input/model-quality issues.")
+        items.append(
+            f"{_project_model_label(project_model)} is invalid or unsupported; alignment signals are reported as input/model-quality issues."
+        )
     elif _project_model_has_alignment_gaps(project_model):
-        items.append("Project Model v0 advisory alignment found goal, component, dependency, evidence, or held-out probe gaps.")
+        items.append(
+            f"{_project_model_label(project_model)} advisory alignment found goal, component, dependency, evidence, or held-out probe gaps."
+        )
     if subscores.rationaleSpecificity < 0.55:
         items.append("Rationale lacks concrete thresholds, causal links, or evidence markers.")
     if subscores.actionCoupling < 0.55:
