@@ -16,12 +16,14 @@ from .models import (
     EvidenceTrustLevel,
     MethodTrust,
     PolicyFinding,
+    ProjectModelAlignment,
     ProviderMetadata,
     ReadinessMetadata,
     RubricMetadata,
     SupportAssessment,
     SupportMarginReliability,
     ToulminArgument,
+    default_project_model_alignment,
 )
 from .providers import DETERMINISTIC_PROVIDER_METADATA
 
@@ -121,6 +123,27 @@ def _evidence_has_soft_mechanical_failure(evidence: EvidenceResolutionAssessment
     )
 
 
+def _project_model_invalid(project_model: ProjectModelAlignment | None) -> bool:
+    return project_model is not None and project_model.projectModelValidity.status in {"invalid", "unsupported_version"}
+
+
+def _project_model_has_alignment_gaps(project_model: ProjectModelAlignment | None) -> bool:
+    if project_model is None or project_model.projectModelPresence == "absent":
+        return False
+    if _project_model_invalid(project_model):
+        return True
+    return bool(
+        project_model.invariantViolations
+        or project_model.dependencyViolations
+        or project_model.unsupportedAssumptions
+        or project_model.evidenceGroundingGaps
+        or project_model.heldOutProbeFailures
+        or project_model.goalAlignment.status == "misaligned"
+        or project_model.componentAlignment.status == "misaligned"
+        or project_model.nearNeighborResistance.status == "weak"
+    )
+
+
 def method_trust_for(
     request: EvaluationRequest, evidence: EvidenceResolutionAssessment | None
 ) -> MethodTrust:
@@ -171,6 +194,7 @@ def recommend(
     findings: list[PolicyFinding],
     grounding: ContextGroundingAssessment | None,
     evidence: EvidenceResolutionAssessment | None = None,
+    project_model: ProjectModelAlignment | None = None,
 ) -> EvaluationRecommendation:
     base = _base_recommendation(overall, findings)
     if base in {"abort_signal_only", "escalate"} or any(finding.severity == "blocker" for finding in findings):
@@ -181,6 +205,10 @@ def recommend(
         elif _evidence_has_soft_mechanical_failure(evidence):
             cap: EvaluationRecommendation = "reconsider" if evidence.summary.missingRef > 0 or evidence.summary.unreferencedLoadBearing > 0 else "proceed_with_caveats"
             base = _cap_recommendation(base, cap)
+    if _project_model_invalid(project_model):
+        base = _cap_recommendation(base, "reconsider")
+    elif _project_model_has_alignment_gaps(project_model):
+        base = _cap_recommendation(base, "proceed_with_caveats")
     if grounding is None:
         return base
     if grounding.summary.contradicted > 0:
@@ -210,8 +238,13 @@ def top_weaknesses(
     findings: list[PolicyFinding],
     grounding: ContextGroundingAssessment,
     evidence: EvidenceResolutionAssessment | None = None,
+    project_model: ProjectModelAlignment | None = None,
 ) -> list[str]:
     items: list[str] = []
+    if _project_model_invalid(project_model):
+        items.append("Project Model v0 is invalid or unsupported; alignment signals are reported as input/model-quality issues.")
+    elif _project_model_has_alignment_gaps(project_model):
+        items.append("Project Model v0 advisory alignment found goal, component, dependency, evidence, or held-out probe gaps.")
     if subscores.rationaleSpecificity < 0.55:
         items.append("Rationale lacks concrete thresholds, causal links, or evidence markers.")
     if subscores.actionCoupling < 0.55:
@@ -258,6 +291,7 @@ def readiness(
     grounding: ContextGroundingAssessment | None,
     findings: list[PolicyFinding],
     evidence: EvidenceResolutionAssessment | None = None,
+    project_model: ProjectModelAlignment | None = None,
 ) -> ReadinessMetadata:
     reasons: list[str] = ["uncalibrated_internal_alpha", "specificity_margin_unreliable", "counterfactual_probe_not_run"]
     if status != "complete" or overall is None:
@@ -287,6 +321,10 @@ def readiness(
             or evidence.summary.unreferencedLoadBearing > 0
         ):
             reasons.append("unresolved_evidence_refs")
+    if _project_model_invalid(project_model):
+        reasons.append("invalid_project_model")
+    elif _project_model_has_alignment_gaps(project_model):
+        reasons.append("project_model_alignment_gap")
     high_priority = [
         reason
         for reason in reasons
@@ -324,14 +362,16 @@ def build_report(
     provider_metadata: ProviderMetadata = DETERMINISTIC_PROVIDER_METADATA,
     audit_ref: str | None = None,
     evidence_resolution: EvidenceResolutionAssessment | None = None,
+    project_model_alignment: ProjectModelAlignment | None = None,
 ) -> EvaluationReport:
     support = support_with_margin_reliability(support)
     overall = overall_signal(subscores)
     method_trust = method_trust_for(request, evidence_resolution)
+    project_model_alignment = project_model_alignment or default_project_model_alignment()
     return EvaluationReport(
         traceId=request.traceId,
         status="complete",
-        recommendation=recommend(overall, findings, grounding, evidence_resolution),
+        recommendation=recommend(overall, findings, grounding, evidence_resolution, project_model_alignment),
         calibration="uncalibrated_internal_alpha",
         overallSignal=overall,
         subscores=subscores,
@@ -339,17 +379,18 @@ def build_report(
         grounding=grounding,
         evidenceResolution=evidence_resolution,
         methodTrust=method_trust,
+        projectModelAlignment=project_model_alignment,
         toulmin=toulmin,
         alternatives=alternatives,
         policyFindings=findings,
-        topWeaknesses=top_weaknesses(subscores, support, findings, grounding, evidence_resolution),
+        topWeaknesses=top_weaknesses(subscores, support, findings, grounding, evidence_resolution, project_model_alignment),
         confidence=confidence(subscores, support, grounding),
         rubric=RUBRIC,
         providerMetadata=provider_metadata,
         auditRef=audit_ref,
         errors=[],
         productSemantics=PRODUCT_SEMANTICS,
-        readiness=readiness("complete", overall, grounding, findings, evidence_resolution),
+        readiness=readiness("complete", overall, grounding, findings, evidence_resolution, project_model_alignment),
         createdAt=_now(),
     )
 

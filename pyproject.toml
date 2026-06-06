@@ -44,6 +44,14 @@ packages = ["src/elenchus_core"]
 addopts = "-q"
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["elenchus_core"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+precision = 2
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

@@ -32,6 +32,12 @@ EvidenceTrustLevel = Literal[
 ]
 MethodTrustStructural = Literal["deterministic", "legacy_free_text"]
 CounterfactualProbeTrust = Literal["actual_reexecution", "self_report", "not_run"]
+ProjectModelPresence = Literal["absent", "present"]
+ProjectModelValidityStatus = Literal["absent", "valid", "invalid", "unsupported_version"]
+ProjectModelAlignmentStatus = Literal["not_available", "aligned", "partial", "misaligned"]
+ProjectModelNearNeighborStatus = Literal["not_available", "resistant", "partial", "weak"]
+ProjectModelFailureModeHint = Literal["F1", "F2", "F3", "F4"]
+ProjectModelFindingSeverity = Literal["info", "warning", "error"]
 
 MAX_EVIDENCE_ARTIFACTS = 50
 MAX_EVIDENCE_ARTIFACT_CHARS = 20_000
@@ -92,6 +98,7 @@ class EvaluationRequest(ElenchusModel):
     availableActions: list[TypedAction] | None = None
     structuredRationale: StructuredRationale | None = None
     evidenceBundle: list[EvidenceArtifact] | None = Field(default=None, max_length=MAX_EVIDENCE_ARTIFACTS)
+    projectModel: dict[str, Any] | None = None
     domainHints: list[DomainName] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -292,6 +299,8 @@ EvaluationReviewReason = Literal[
     "evidence_hash_unverifiable",
     "duplicate_evidence_artifact_id",
     "counterfactual_probe_not_run",
+    "invalid_project_model",
+    "project_model_alignment_gap",
 ]
 BlockedEvaluationUse = Literal[
     "production_allow_deny",
@@ -313,6 +322,74 @@ class ReadinessMetadata(ElenchusModel):
     evaluatorFingerprint: str
 
 
+class ProjectModelFinding(ElenchusModel):
+    code: str
+    severity: ProjectModelFindingSeverity
+    location: str
+    message: str
+
+
+class ProjectModelValidity(ElenchusModel):
+    status: ProjectModelValidityStatus
+    schemaVersion: str | None = None
+    qualityGatePassed: bool | None = None
+    findings: list[ProjectModelFinding] = Field(default_factory=list)
+
+
+class ProjectModelScalarAlignment(ElenchusModel):
+    status: ProjectModelAlignmentStatus
+    score: float | None = None
+    matchedTerms: list[str] = Field(default_factory=list)
+    missingTerms: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ProjectModelComponentAlignment(ElenchusModel):
+    status: ProjectModelAlignmentStatus
+    score: float | None = None
+    matchedIds: list[str] = Field(default_factory=list)
+    missingIds: list[str] = Field(default_factory=list)
+    misdirectedIds: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ProjectModelNearNeighborResistance(ElenchusModel):
+    status: ProjectModelNearNeighborStatus
+    score: float | None = None
+    resistedIds: list[str] = Field(default_factory=list)
+    unaddressedIds: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ProjectModelAlignment(ElenchusModel):
+    projectModelPresence: ProjectModelPresence
+    projectModelValidity: ProjectModelValidity
+    goalAlignment: ProjectModelScalarAlignment
+    componentAlignment: ProjectModelComponentAlignment
+    invariantViolations: list[ProjectModelFinding] = Field(default_factory=list)
+    dependencyViolations: list[ProjectModelFinding] = Field(default_factory=list)
+    unsupportedAssumptions: list[ProjectModelFinding] = Field(default_factory=list)
+    evidenceGroundingGaps: list[ProjectModelFinding] = Field(default_factory=list)
+    nearNeighborResistance: ProjectModelNearNeighborResistance
+    heldOutProbeFailures: list[ProjectModelFinding] = Field(default_factory=list)
+    failureModeHint: ProjectModelFailureModeHint | None = None
+    failureModeHintReason: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+def default_project_model_alignment() -> ProjectModelAlignment:
+    return ProjectModelAlignment(
+        projectModelPresence="absent",
+        projectModelValidity=ProjectModelValidity(status="absent", qualityGatePassed=None),
+        goalAlignment=ProjectModelScalarAlignment(status="not_available"),
+        componentAlignment=ProjectModelComponentAlignment(status="not_available"),
+        nearNeighborResistance=ProjectModelNearNeighborResistance(status="not_available"),
+        notes=[
+            "No Project Model v0 was supplied; project-level alignment, F2/F3 separation, and held-out probe signals were not run."
+        ],
+    )
+
+
 class EvaluationReport(ElenchusModel):
     traceId: str
     status: EvaluationStatus
@@ -324,6 +401,7 @@ class EvaluationReport(ElenchusModel):
     grounding: ContextGroundingAssessment | None
     evidenceResolution: EvidenceResolutionAssessment | None = None
     methodTrust: MethodTrust = Field(default_factory=default_method_trust)
+    projectModelAlignment: ProjectModelAlignment = Field(default_factory=default_project_model_alignment)
     toulmin: ToulminArgument | None
     alternatives: list[AlternativeAction]
     policyFindings: list[PolicyFinding]

@@ -147,7 +147,7 @@ def _ref_assessment(
         if pointer_present:
             score += 0.2
         score += 0.25 if hash_verified else 0.05
-    else:
+    else:  # pragma: no cover - defensive fallback; absent content is classified as pointer_unresolved above.
         score = 0.0
 
     return (
